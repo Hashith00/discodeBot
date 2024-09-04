@@ -1,5 +1,6 @@
 require("dotenv/config");
 const cron = require("node-cron");
+const nodemailer = require("nodemailer");
 const { Client, IntentsBitField } = require("discord.js");
 const { Configuration, OpenAIApi } = require("openai");
 const client = new Client({
@@ -16,6 +17,24 @@ const Summary = require("./models/summaryModel.js");
 // Make the database connections
 dbConnection();
 
+// Initailize the mail server
+// Create a transporter object using SMTP transport
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL, // Your email address
+    pass: process.env.EMAIL_PASSWORD, // Your email password or app password
+  },
+});
+
+// Define the mail options
+const mailOptions = {
+  from: process.env.EMAIL, // Sender address
+  to: process.env.RECIPIENT_EMAIL, // Recipient address (could be your own email)
+  subject: "Summary Saved Successfully", // Subject line
+  text: "The summary has been successfully saved to the database.", // Plain text body
+};
+
 // OpenAI configuration
 const configuration = new Configuration({
   apiKey: process.env.API_KEY,
@@ -23,7 +42,7 @@ const configuration = new Configuration({
 const openai = new OpenAIApi(configuration);
 
 // Set the cron job to db save the summary
-cron.schedule("0 9 * * 1", async () => {
+cron.schedule("* * * * *", async () => {
   // Runs every minute
   try {
     const latestTasks = await Task.find();
@@ -60,6 +79,14 @@ cron.schedule("0 9 * * 1", async () => {
       try {
         await SummaryToSave.save();
         console.log("Summary saved successfully.");
+
+        // Send the email notification
+        transporter.sendMail(mailOptions, (error, info) => {
+          if (error) {
+            return console.log("Error sending email:", error);
+          }
+          console.log("Email sent: " + info.response);
+        });
       } catch (error) {
         console.log("Database Save Error:", error);
       }
