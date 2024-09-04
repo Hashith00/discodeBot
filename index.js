@@ -1,4 +1,5 @@
 require("dotenv/config");
+const cron = require("node-cron");
 const { Client, IntentsBitField } = require("discord.js");
 const { Configuration, OpenAIApi } = require("openai");
 const client = new Client({
@@ -10,6 +11,7 @@ const client = new Client({
 });
 const dbConnection = require("./database/dbConnection.js");
 const Task = require("./models/tasksModel.js");
+const Summary = require("./models/summaryModel.js");
 
 // Make the database connections
 dbConnection();
@@ -19,6 +21,55 @@ const configuration = new Configuration({
   apiKey: process.env.API_KEY,
 });
 const openai = new OpenAIApi(configuration);
+
+// Set the cron job to db save the summary
+cron.schedule("0 9 * * 1", async () => {
+  // Runs every minute
+  try {
+    const latestTasks = await Task.find();
+    let summary =
+      "These are my tasks and the dates that I have done those tasks: \n";
+
+    latestTasks.forEach((taskObject) => {
+      if (taskObject.name === "hashith") {
+        summary += `${taskObject.task} - created date: ${taskObject.createdAt}\n`;
+      }
+    });
+
+    if (summary.length > 100) {
+      summary += "Generate me a weekly summary of my work.";
+      const result = await openai.createChatCompletion({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a helpful assistant. And you to generate me summaries based on my given data.",
+          },
+          { role: "user", content: summary },
+        ],
+        max_tokens: 512,
+      });
+
+      // Save the summary to a new database
+      const SummaryToSave = new Summary({
+        userName: "hashith",
+        summary: result.data.choices[0].message.content,
+      });
+
+      try {
+        await SummaryToSave.save();
+        console.log("Summary saved successfully.");
+      } catch (error) {
+        console.log("Database Save Error:", error);
+      }
+    } else {
+      console.log("Summary not generated. Not enough content.");
+    }
+  } catch (error) {
+    console.log("Error in cron job:", error);
+  }
+});
 
 client.on("ready", () => {
   console.log("The bot is online!");
