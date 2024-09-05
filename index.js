@@ -42,7 +42,7 @@ const configuration = new Configuration({
 const openai = new OpenAIApi(configuration);
 
 // Set the cron job to db save the summary
-cron.schedule("* * * * *", async () => {
+cron.schedule("0 9 * * 1", async () => {
   // Runs every minute
   try {
     const latestTasks = await Task.find();
